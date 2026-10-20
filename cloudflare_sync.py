@@ -187,8 +187,8 @@ def report_records(
 				record.name,
 				record.content,
 				record.ttl,
-				record.priority,
-				record.proxied,
+				getattr(record, "priority", None),
+				getattr(record, "proxied", None),
 			)
 			for record in existing
 		],

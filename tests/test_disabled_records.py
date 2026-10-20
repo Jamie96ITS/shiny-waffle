@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
 
+from cloudflare.types.dns import ARecord
 from cloudflare_sync import sync_records as sync_cloudflare_records
 from dns_sync_common import (
 	DNSRecord,
@@ -36,12 +37,11 @@ class DisabledRecordTests(unittest.TestCase):
 
 	def test_cloudflare_report_separates_csv_matches_from_server_only(self) -> None:
 		existing = [
-			SimpleNamespace(
-				type="A",
+			ARecord(
 				name="www.example.com.",
-				content="192.0.2.1",
 				ttl=300,
-				priority=None,
+				type="A",
+				content="192.0.2.1",
 				proxied=True,
 			),
 			SimpleNamespace(
