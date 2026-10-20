@@ -3,6 +3,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 .cloudflare-dns-sync.json
+.technitium-dns-sync.json
 
 # C extensions
 *.so

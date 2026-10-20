@@ -1,0 +1,6 @@
+{
+  "base_url": "http://localhost:5380",
+  "token": "your-technitium-api-token",
+  "zone": "example.com",
+  "node": null
+}
