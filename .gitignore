@@ -2,8 +2,9 @@
 __pycache__/
 *.py[codz]
 *$py.class
-.cloudflare-dns-sync.json
-.technitium-dns-sync.json
+.cloudflare*-dns-sync.json
+.technitium*-dns-sync.json
+dns_records.csv
 
 # C extensions
 *.so
@@ -220,4 +221,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-dns_records.csv
