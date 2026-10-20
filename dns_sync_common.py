@@ -233,6 +233,8 @@ def load_records(csv_path: Path) -> list[DNSRecord]:
 			key = (record_type, name.lower())
 			if record_type == "MX":
 				key += (target.lower(), str(priority))
+			elif record_type == "TXT":
+				key += (target,)
 			if key in seen:
 				duplicate_detail = "duplicate MX target and priority" if record_type == "MX" else f"duplicate {record_type} record for {name!r}"
 				raise ValueError(f"CSV row {row_number}: {duplicate_detail}")

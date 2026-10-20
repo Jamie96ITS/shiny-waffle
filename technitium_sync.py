@@ -181,7 +181,7 @@ def sync_records(
 				matches[index] = current
 				available.remove(current)
 
-		if record_type != "MX" and len(records_to_reconcile) > 1 and enabled_records:
+		if record_type not in {"MX", "TXT"} and len(records_to_reconcile) > 1 and enabled_records:
 			if not any(
 				record_target(record, record_type) == enabled_records[0].target
 				for record in records_to_reconcile

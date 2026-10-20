@@ -8,7 +8,7 @@ Use `--report` to list existing server records without syncing. It separates rec
 
 For Cloudflare A, AAAA, and CNAME records, set `proxied` to `true` or `false` to enable or disable Cloudflare proxying. Values are case-insensitive; an empty value (or a missing column) leaves the current setting unchanged on updates and uses Cloudflare's default on creates. The `proxied` column is Cloudflare-specific and is ignored by the Technitium provider.
 
-Supported record types are `A`, `AAAA`, `CNAME`, `MX`, `NS`, `PTR`, and `TXT`. Each MX row requires a numeric `priority` from 0 to 65535; multiple MX rows can share a name. TTL is optional and accepts `1` for automatic TTL or a value from 60 to 86400 seconds. If omitted, existing records keep their current TTL and new records use automatic TTL.
+Supported record types are `A`, `AAAA`, `CNAME`, `MX`, `NS`, `PTR`, and `TXT`. Multiple MX rows can share a name when they have different targets or priorities. Multiple TXT rows can also share a name when their values differ. Each MX row requires a numeric `priority` from 0 to 65535. TTL is optional and accepts `1` for automatic TTL or a value from 60 to 86400 seconds. If omitted, existing records keep their current TTL and new records use automatic TTL.
 
 Both sync programs check for a TXT record named `_dnsweaver.<record-name>` before reconciling an existing record. If found, they skip that record set, including disabled-row deletions, and report that DNSWeaver manages it. They also skip existing CNAME records whose target ends in `.cfargotunnel.com` (case-insensitive, with an optional trailing dot), reporting that Cloudflare Tunnels manages the name.
 

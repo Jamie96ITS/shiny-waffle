@@ -418,6 +418,74 @@ class DisabledRecordTests(unittest.TestCase):
 			with self.assertRaisesRegex(ValueError, "CNAME cannot coexist with A"):
 				load_records(csv_path)
 
+	def test_load_records_allows_multiple_txt_values_at_same_name(self) -> None:
+		with tempfile.TemporaryDirectory() as directory:
+			csv_path = Path(directory) / "records.csv"
+			csv_path.write_text(
+				"record_type,name,target\n"
+				"TXT,example.com,first-value\n"
+				"TXT,example.com,second-value\n",
+				encoding="utf-8",
+			)
+
+			records = load_records(csv_path)
+
+		self.assertEqual([record.target for record in records], ["first-value", "second-value"])
+
+	def test_load_records_still_rejects_duplicate_txt_value(self) -> None:
+		with tempfile.TemporaryDirectory() as directory:
+			csv_path = Path(directory) / "records.csv"
+			csv_path.write_text(
+				"record_type,name,target\n"
+				"TXT,example.com,same-value\n"
+				"TXT,example.com,same-value\n",
+				encoding="utf-8",
+			)
+
+			with self.assertRaisesRegex(ValueError, "duplicate TXT record"):
+				load_records(csv_path)
+
+	def test_cloudflare_creates_multiple_txt_records_at_same_name(self) -> None:
+		client = Mock()
+		client.dns.records.list.return_value = []
+
+		sync_cloudflare_records(
+			[
+				DNSRecord("TXT", "example.com", "first-value"),
+				DNSRecord("TXT", "example.com", "second-value"),
+			],
+			client,
+			"zone-id",
+		)
+
+		self.assertEqual(client.dns.records.create.call_count, 2)
+		self.assertEqual(
+			[call.kwargs["content"] for call in client.dns.records.create.call_args_list],
+			["first-value", "second-value"],
+		)
+
+	def test_technitium_creates_multiple_txt_records_at_same_name(self) -> None:
+		client = Mock()
+		client.zones.get_records.return_value = []
+
+		sync_technitium_records(
+			[
+				DNSRecord("TXT", "example.com", "first-value"),
+				DNSRecord("TXT", "example.com", "second-value"),
+			],
+			client,
+			"example.com",
+		)
+
+		self.assertEqual(client.zones.add_record.call_count, 2)
+		self.assertEqual(
+			[
+				call.kwargs["extra"]["text"]
+				for call in client.zones.add_record.call_args_list
+			],
+			["first-value", "second-value"],
+		)
+
 	def test_load_records_allows_conflicting_record_marked_disabled(self) -> None:
 		with tempfile.TemporaryDirectory() as directory:
 			csv_path = Path(directory) / "records.csv"
