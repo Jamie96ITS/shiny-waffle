@@ -1,0 +1,6 @@
+record_type,name,target,ttl,priority
+A,www.example.com,192.0.2.10,3600,
+CNAME,docs.example.com,www.example.com,,
+TXT,example.com,verification-token,1,
+MX,example.com,mail1.example.com,3600,10
+MX,example.com,mail2.example.com,3600,20
