@@ -1,0 +1,77 @@
+name: Sync DNS records
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - dns_records.csv
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: DNS provider
+        type: choice
+        options:
+          - cloudflare
+          - technitium
+        default: cloudflare
+        required: true
+      dry_run:
+        description: Preview without writing DNS changes
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dns-record-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      DNS_PROVIDER: ${{ inputs.provider || vars.DNS_PROVIDER || 'cloudflare' }}
+      DNS_CSV_PATH: ${{ vars.DNS_CSV_PATH || 'dns_records.csv' }}
+      DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+      TECHNITIUM_BASE_URL: ${{ secrets.TECHNITIUM_BASE_URL }}
+      TECHNITIUM_API_TOKEN: ${{ secrets.TECHNITIUM_API_TOKEN }}
+      TECHNITIUM_ZONE: ${{ secrets.TECHNITIUM_ZONE }}
+      TECHNITIUM_NODE: ${{ vars.TECHNITIUM_NODE }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Reconcile DNS records
+        shell: bash
+        run: |
+          set -euo pipefail
+          dry_run_args=()
+          if [[ "$DRY_RUN" == "true" ]]; then
+            dry_run_args+=(--dry-run)
+          fi
+
+          case "$DNS_PROVIDER" in
+            cloudflare)
+              python cloudflare_sync.py "$DNS_CSV_PATH" "${dry_run_args[@]}"
+              ;;
+            technitium)
+              python technitium_sync.py "$DNS_CSV_PATH" "${dry_run_args[@]}"
+              ;;
+            *)
+              echo "Unsupported DNS_PROVIDER: $DNS_PROVIDER" >&2
+              exit 2
+              ;;
+          esac

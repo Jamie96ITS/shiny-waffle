@@ -27,3 +27,9 @@ python technitium_sync.py dns_records.example.csv --dry-run
 ```
 
 Use `--config PATH` to select a different JSON config file. The Technitium API uses its server default TTL for new records when CSV TTL is blank or `1`; for updates, TTL `1` requests the API's documented default of 3600 seconds. An omitted TTL preserves the existing record's TTL.
+
+## GitHub Actions
+
+An example workflow is provided at [.github/workflows/dns-sync.yml.example](.github/workflows/dns-sync.yml.example). Rename it to `.github/workflows/dns-sync.yml` to activate it. It syncs on pushes to `main` that change `dns_records.csv`; manual runs let you choose the provider and default to dry-run.
+
+Add the provider credentials as GitHub Actions repository secrets: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID`, or `TECHNITIUM_BASE_URL`, `TECHNITIUM_API_TOKEN`, and `TECHNITIUM_ZONE`. For manual runs, the `DNS_PROVIDER` repository variable can set the default provider for push-triggered runs; it defaults to Cloudflare. Set `DNS_CSV_PATH` to change the CSV location, and update the workflow's `paths` filter to match it. A hosted runner must be able to reach the Technitium API; use a self-hosted runner for a private DNS server.
