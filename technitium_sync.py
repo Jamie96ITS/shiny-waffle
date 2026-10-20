@@ -204,7 +204,7 @@ def sync_records(
 				available.remove(current)
 
 			if current is not None:
-				target_ttl = current.ttl if desired.ttl is None else 3600 if desired.ttl == 1 else desired.ttl
+				target_ttl = current.ttl if desired.ttl is None else 300 if desired.ttl == 1 else desired.ttl
 				current_target = record_target(current, record_type)
 				target_priority = desired.priority if record_type == "MX" else None
 				if current_target == desired.target and current.ttl == target_ttl and (
