@@ -6,7 +6,7 @@ Supported record types are `A`, `AAAA`, `CNAME`, `MX`, `NS`, `PTR`, and `TXT`. E
 
 Both sync programs check for a TXT record named `_dnsweaver.<record-name>` before reconciling an existing record. If found, they skip that record set and report that DNSWeaver manages it.
 
-Credentials can come from environment variables or the default `.cloudflare-dns-sync.json` file. The JSON file uses `api_token` and `zone_id` keys; environment variables take precedence. A different file can be selected with `--config`.
+Credentials can come from environment variables or the default `.cloudflare-dns-sync.json` file. The JSON file uses `api_token` and `zone_id` keys; environment variables take precedence. A different file can be selected with `--config`. Cloudflare DNS record requests use the zone ID and do not require an account ID. The API token must have Zone DNS Read and Zone DNS Edit permissions and be scoped to the selected zone. If a request returns HTTP 403, verify those permissions, the token's zone resource scope, and that `zone_id` identifies the intended zone.
 
 For example, create `.cloudflare-dns-sync.json` using the structure in [cloudflare-dns-sync.example.json](cloudflare-dns-sync.example.json), then preview the changes:
 

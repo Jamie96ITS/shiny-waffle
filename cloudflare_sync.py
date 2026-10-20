@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from cloudflare import Cloudflare
+from cloudflare import Cloudflare, PermissionDeniedError
 from dns_sync_common import DNSRecord, dns_names_equal, dnsweaver_marker_name, load_records
 
 
@@ -158,6 +158,15 @@ def main() -> int:
 		sync_records(records, Cloudflare(api_token=api_token), zone_id, args.dry_run)
 	except (OSError, ValueError) as error:
 		print(f"Error: {error}", file=sys.stderr)
+		return 1
+	except PermissionDeniedError as error:
+		print(
+			"Cloudflare API returned HTTP 403 (permission denied). Check that the API token "
+			"has Zone DNS Read and Zone DNS Edit permissions for the zone identified by "
+			"CLOUDFLARE_ZONE_ID. DNS record requests do not require an account ID.\n"
+			f"Cloudflare response: {error}",
+			file=sys.stderr,
+		)
 		return 1
 	except Exception as error:
 		print(f"Cloudflare API error: {error}", file=sys.stderr)
