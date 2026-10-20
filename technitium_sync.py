@@ -99,8 +99,28 @@ def sync_records(
 
 		available = existing.copy()
 		matches: dict[int, DnsRecord] = {}
+		for desired in (record for record in desired_records if record.disabled):
+			current = next(
+				(
+					record
+					for record in available
+					if record_target(record, record_type) == desired.target
+					and (record_type != "MX" or record.r_data.get("preference") == desired.priority)
+				),
+				None,
+			)
+			if current is None:
+				print(f"NOT FOUND {record_type} {name} -> {desired.target} (disabled)")
+				continue
+			print(f"DELETE {record_type} {name} -> {desired.target}")
+			available.remove(current)
+			if not dry_run:
+				client.zones.delete_record(domain=current.name, zone=zone, type=record_type)
 
-		for index, desired in enumerate(desired_records):
+		enabled_records = [record for record in desired_records if not record.disabled]
+		records_to_reconcile = available.copy()
+
+		for index, desired in enumerate(enabled_records):
 			current = next(
 				(
 					record
@@ -114,14 +134,17 @@ def sync_records(
 				matches[index] = current
 				available.remove(current)
 
-		if record_type != "MX" and len(existing) > 1:
-			if not any(record_target(record, record_type) == desired_records[0].target for record in existing):
+		if record_type != "MX" and len(records_to_reconcile) > 1 and enabled_records:
+			if not any(
+				record_target(record, record_type) == enabled_records[0].target
+				for record in records_to_reconcile
+			):
 				raise ValueError(
 					f"Multiple {record_type} records exist for {name!r}, "
 					"and none match the CSV target; resolve the duplicates manually"
 				)
 
-		for index, desired in enumerate(desired_records):
+		for index, desired in enumerate(enabled_records):
 			current = matches.get(index)
 			if current is None and available:
 				if record_type == "MX":
