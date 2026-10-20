@@ -1,3 +1,5 @@
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -5,11 +7,112 @@ from types import SimpleNamespace
 from unittest.mock import Mock, call
 
 from cloudflare_sync import sync_records as sync_cloudflare_records
-from dns_sync_common import DNSRecord, is_cloudflare_tunnel_target, load_records
-from technitium_sync import sync_records as sync_technitium_records
+from dns_sync_common import (
+	DNSRecord,
+	is_cloudflare_tunnel_target,
+	load_records,
+	parse_report_types,
+)
+from technitium_sync import (
+	report_records as report_technitium_records,
+	sync_records as sync_technitium_records,
+)
+from cloudflare_sync import report_records as report_cloudflare_records
 
 
 class DisabledRecordTests(unittest.TestCase):
+	def test_parse_report_types_defaults_empty_and_all_to_supported_types(self) -> None:
+		self.assertIsNone(parse_report_types(""))
+		self.assertIsNone(parse_report_types("all"))
+		self.assertIsNone(parse_report_types("ALL"))
+
+	def test_parse_report_types_parses_comma_separated_types(self) -> None:
+		self.assertEqual(parse_report_types(" a,AAAA,CAA "), frozenset({"A", "AAAA", "CAA"}))
+
+	def test_parse_report_types_rejects_invalid_values(self) -> None:
+		for value in ("A,,AAAA", "A,UNKNOWN"):
+			with self.subTest(value=value), self.assertRaises(ValueError):
+				parse_report_types(value)
+
+	def test_cloudflare_report_separates_csv_matches_from_server_only(self) -> None:
+		existing = [
+			SimpleNamespace(
+				type="A",
+				name="www.example.com.",
+				content="192.0.2.1",
+				ttl=300,
+				priority=None,
+				proxied=True,
+			),
+			SimpleNamespace(
+				type="AAAA",
+				name="www.example.com",
+				content="2001:db8::1",
+				ttl=300,
+				priority=None,
+				proxied=False,
+			),
+			SimpleNamespace(
+				type="CAA",
+				name="www.example.com",
+				content='0 issue "letsencrypt.org"',
+				ttl=300,
+				priority=0,
+				proxied=None,
+			),
+		]
+		client = Mock()
+		client.dns.records.list.return_value = existing
+		output = io.StringIO()
+
+		with contextlib.redirect_stdout(output):
+			report_cloudflare_records(
+				[DNSRecord("A", "WWW.example.com", "192.0.2.1")],
+				client,
+				"zone-id",
+				None,
+			)
+
+		self.assertIn("Records also in CSV:", output.getvalue())
+		self.assertIn("A www.example.com. -> 192.0.2.1", output.getvalue())
+		self.assertIn("Records only on server:", output.getvalue())
+		self.assertIn("AAAA www.example.com -> 2001:db8::1", output.getvalue())
+		self.assertIn('CAA www.example.com -> 0 issue "letsencrypt.org"', output.getvalue())
+
+	def test_technitium_report_filters_types_without_syncing(self) -> None:
+		existing = [
+			SimpleNamespace(
+				type="A",
+				name="www.example.com",
+				r_data={"ipAddress": "192.0.2.1"},
+				ttl=300,
+			),
+			SimpleNamespace(
+				type="AAAA",
+				name="www.example.com",
+				r_data={"ipAddress": "2001:db8::1"},
+				ttl=300,
+			),
+		]
+		client = Mock()
+		client.zones.get_records.return_value = existing
+		output = io.StringIO()
+
+		with contextlib.redirect_stdout(output):
+			report_technitium_records(
+				[DNSRecord("A", "www.example.com", "192.0.2.1")],
+				client,
+				"zone",
+				frozenset({"A"}),
+			)
+
+		client.zones.get_records.assert_called_once_with(domain="zone", zone="zone", list_zone=True)
+		self.assertIn("A www.example.com -> 192.0.2.1", output.getvalue())
+		self.assertNotIn("AAAA", output.getvalue())
+		client.zones.add_record.assert_not_called()
+		client.zones.update_record.assert_not_called()
+		client.zones.delete_record.assert_not_called()
+
 	def test_load_records_parses_proxied_values(self) -> None:
 		with tempfile.TemporaryDirectory() as directory:
 			csv_path = Path(directory) / "records.csv"

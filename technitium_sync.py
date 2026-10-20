@@ -17,6 +17,8 @@ from dns_sync_common import (
 	dnsweaver_marker_name,
 	is_cloudflare_tunnel_target,
 	load_records,
+	parse_report_types,
+	print_record_report,
 	record_is_disabled,
 	validate_cname_address_conflicts,
 )
@@ -231,6 +233,30 @@ def sync_records(
 				)
 
 
+def report_records(
+	records: list[DNSRecord],
+	client: Client,
+	zone: str,
+	record_types: frozenset[str] | None,
+) -> None:
+	existing = client.zones.get_records(domain=zone, zone=zone, list_zone=True)
+	print_record_report(
+		records,
+		[
+			(
+				record.type,
+				record.name,
+				record_target(record, record.type) or "",
+				record.ttl,
+				record.r_data.get("preference"),
+				None,
+			)
+			for record in existing
+		],
+		record_types,
+	)
+
+
 def load_config(config_path: Path) -> dict[str, str | None]:
 	config: dict[str, Any] = {}
 	if config_path.exists():
@@ -259,12 +285,24 @@ def main() -> int:
 	parser.add_argument("csv_file", type=Path, help="CSV with record_type, name, target, and optional ttl/priority columns")
 	parser.add_argument("--dry-run", action="store_true", help="Show planned changes without writing to Technitium")
 	parser.add_argument(
+		"--report",
+		nargs="?",
+		const="all",
+		default=None,
+		metavar="ALL|TYPE,...",
+		help="Report existing records without syncing; use all types by default or select types (e.g. A,AAAA)",
+	)
+	parser.add_argument(
 		"--config",
 		type=Path,
 		default=Path(".technitium-dns-sync.json"),
 		help="JSON credentials file (default: .technitium-dns-sync.json)",
 	)
 	args = parser.parse_args()
+	try:
+		report_types = parse_report_types(args.report) if args.report is not None else None
+	except ValueError as error:
+		parser.error(str(error))
 
 	try:
 		settings = load_config(args.config)
@@ -279,13 +317,16 @@ def main() -> int:
 
 	try:
 		records = load_records(args.csv_file)
-		if not records:
+		if not records and args.report is None:
 			raise ValueError("CSV contains no DNS records")
 		with Client(
 			settings["base_url"],
 			token=settings["token"],
 			node=settings["node"],
 		) as client:
+			if args.report is not None:
+				report_records(records, client, settings["zone"], report_types)
+				return 0
 			sync_records(records, client, settings["zone"], args.dry_run)
 	except (OSError, ValueError) as error:
 		print(f"Error: {error}", file=sys.stderr)

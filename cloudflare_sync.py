@@ -15,6 +15,8 @@ from dns_sync_common import (
 	conflicting_record_types,
 	is_cloudflare_tunnel_target,
 	load_records,
+	parse_report_types,
+	print_record_report,
 	record_is_disabled,
 	validate_cname_address_conflicts,
 )
@@ -170,6 +172,30 @@ def sync_records(
 				client.dns.records.create(**create_params)
 
 
+def report_records(
+	records: list[DNSRecord],
+	client: Cloudflare,
+	zone_id: str,
+	record_types: frozenset[str] | None,
+) -> None:
+	existing = list(client.dns.records.list(zone_id=zone_id))
+	print_record_report(
+		records,
+		[
+			(
+				record.type,
+				record.name,
+				record.content,
+				record.ttl,
+				record.priority,
+				record.proxied,
+			)
+			for record in existing
+		],
+		record_types,
+	)
+
+
 def load_credentials(config_path: Path) -> tuple[str | None, str | None]:
 	config = {}
 	if config_path.exists():
@@ -194,12 +220,24 @@ def main() -> int:
 	parser.add_argument("csv_file", type=Path, help="CSV with record_type, name, target, and optional ttl/priority columns")
 	parser.add_argument("--dry-run", action="store_true", help="Show planned changes without creating or updating records")
 	parser.add_argument(
+		"--report",
+		nargs="?",
+		const="all",
+		default=None,
+		metavar="ALL|TYPE,...",
+		help="Report existing records without syncing; use all types by default or select types (e.g. A,AAAA)",
+	)
+	parser.add_argument(
 		"--config",
 		type=Path,
 		default=Path(".cloudflare-dns-sync.json"),
 		help="JSON credentials file (default: .cloudflare-dns-sync.json)",
 	)
 	args = parser.parse_args()
+	try:
+		report_types = parse_report_types(args.report) if args.report is not None else None
+	except ValueError as error:
+		parser.error(str(error))
 
 	try:
 		api_token, zone_id = load_credentials(args.config)
@@ -213,9 +251,13 @@ def main() -> int:
 
 	try:
 		records = load_records(args.csv_file)
-		if not records:
+		if not records and args.report is None:
 			raise ValueError("CSV contains no DNS records")
-		sync_records(records, Cloudflare(api_token=api_token), zone_id, args.dry_run)
+		client = Cloudflare(api_token=api_token)
+		if args.report is not None:
+			report_records(records, client, zone_id, report_types)
+			return 0
+		sync_records(records, client, zone_id, args.dry_run)
 	except (OSError, ValueError) as error:
 		print(f"Error: {error}", file=sys.stderr)
 		return 1

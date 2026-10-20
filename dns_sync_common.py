@@ -6,6 +6,22 @@ from pathlib import Path
 
 
 SUPPORTED_RECORD_TYPES = {"A", "AAAA", "CNAME", "MX", "NS", "PTR", "TXT"}
+REPORT_RECORD_TYPES = SUPPORTED_RECORD_TYPES | {
+	"CAA",
+	"CERT",
+	"DNSKEY",
+	"DS",
+	"HTTPS",
+	"LOC",
+	"NAPTR",
+	"OPENPGPKEY",
+	"SMIMEA",
+	"SRV",
+	"SSHFP",
+	"SVCB",
+	"TLSA",
+	"URI",
+}
 
 
 def dnsweaver_marker_name(name: str) -> str:
@@ -60,6 +76,80 @@ def record_is_disabled(
 		and record.target.casefold() == target.casefold()
 		for record in records
 	)
+
+
+def parse_report_types(value: str) -> frozenset[str] | None:
+	if not value or value.casefold() == "all":
+		return None
+
+	record_types = {record_type.strip().upper() for record_type in value.split(",")}
+	if "" in record_types:
+		raise ValueError("report record types must be comma-separated without empty entries")
+	unsupported = record_types - REPORT_RECORD_TYPES
+	if unsupported:
+		supported = ", ".join(sorted(REPORT_RECORD_TYPES))
+		raise ValueError(
+			f"unsupported report record type {', '.join(sorted(unsupported))!r}; use {supported}"
+		)
+	return frozenset(record_types)
+
+
+def dns_record_key(
+	record_type: str,
+	name: str,
+	target: str,
+	priority: int | None = None,
+) -> tuple[str, str, str, int | None]:
+	normalized_target = target.casefold()
+	if record_type in {"CNAME", "MX", "NS", "PTR"}:
+		normalized_target = normalized_target.rstrip(".")
+	return record_type.upper(), name.rstrip(".").casefold(), normalized_target, priority
+
+
+def print_record_report(
+	csv_records: list[DNSRecord],
+	server_records: list[tuple[str, str, str, int | None, int | None, bool | None]],
+	record_types: frozenset[str] | None,
+) -> None:
+	csv_keys = {
+		dns_record_key(record.record_type, record.name, record.target, record.priority)
+		for record in csv_records
+		if record_types is None or record.record_type in record_types
+	}
+	in_csv: list[tuple[str, str, str, int | None, int | None, bool | None]] = []
+	server_only: list[tuple[str, str, str, int | None, int | None, bool | None]] = []
+	for record in server_records:
+		record_type, name, target, _, priority, _ = record
+		record_type = record_type.upper()
+		if record_types is not None and record_type not in record_types:
+			continue
+		key = dns_record_key(record_type, name, target, priority)
+		(in_csv if key in csv_keys else server_only).append(record)
+
+	def print_section(
+		title: str,
+		records: list[tuple[str, str, str, int | None, int | None, bool | None]],
+	) -> None:
+		print(f"{title}:")
+		if not records:
+			print("  (none)")
+			return
+		for record_type, name, target, ttl, priority, proxied in sorted(
+			records,
+			key=lambda item: (item[0], item[1].casefold(), item[2].casefold(), item[4] or -1),
+		):
+			details = []
+			if ttl is not None:
+				details.append(f"TTL={ttl}")
+			if priority is not None:
+				details.append(f"priority={priority}")
+			if proxied is not None:
+				details.append(f"proxied={str(proxied).lower()}")
+			suffix = f" ({', '.join(details)})" if details else ""
+			print(f"  {record_type} {name} -> {target}{suffix}")
+
+	print_section("Records also in CSV", in_csv)
+	print_section("Records only on server", server_only)
 
 
 @dataclass(frozen=True)
