@@ -113,6 +113,28 @@ class DisabledRecordTests(unittest.TestCase):
 		client.zones.update_record.assert_not_called()
 		client.zones.delete_record.assert_not_called()
 
+	def test_technitium_report_formats_soa_records(self) -> None:
+		soa = SimpleNamespace(
+			type="SOA",
+			name="example.com",
+			r_data={
+				"primaryNameServer": "ns1.example.com",
+				"responsiblePerson": "hostmaster.example.com",
+				"serial": 2026102001,
+			},
+			ttl=3600,
+		)
+		client = Mock()
+		client.zones.get_records.return_value = [soa]
+		output = io.StringIO()
+
+		with contextlib.redirect_stdout(output):
+			report_technitium_records([], client, "example.com", None)
+
+		self.assertIn("SOA example.com ->", output.getvalue())
+		self.assertIn('"primaryNameServer": "ns1.example.com"', output.getvalue())
+		self.assertIn('"serial": 2026102001', output.getvalue())
+
 	def test_load_records_parses_proxied_values(self) -> None:
 		with tempfile.TemporaryDirectory() as directory:
 			csv_path = Path(directory) / "records.csv"

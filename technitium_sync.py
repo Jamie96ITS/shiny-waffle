@@ -39,6 +39,15 @@ def record_target(record: DnsRecord, record_type: str) -> str | None:
 	return record.r_data.get(TARGET_FIELDS[record_type])
 
 
+def report_record_target(record: DnsRecord) -> str:
+	target_field = TARGET_FIELDS.get(record.type)
+	if target_field is not None:
+		target = record.r_data.get(target_field)
+		if target is not None:
+			return str(target)
+	return json.dumps(record.r_data, sort_keys=True)
+
+
 def update_fields(record: DnsRecord, desired: DNSRecord) -> dict[str, Any]:
 	current_target = record_target(record, desired.record_type)
 	if current_target is None:
@@ -246,7 +255,7 @@ def report_records(
 			(
 				record.type,
 				record.name,
-				record_target(record, record.type) or "",
+				report_record_target(record),
 				record.ttl,
 				record.r_data.get("preference"),
 				None,
