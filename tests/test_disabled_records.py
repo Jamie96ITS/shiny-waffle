@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from cloudflare_sync import sync_records as sync_cloudflare_records
-from dns_sync_common import DNSRecord, load_records
+from dns_sync_common import DNSRecord, is_cloudflare_tunnel_target, load_records
 from technitium_sync import sync_records as sync_technitium_records
 
 
@@ -115,6 +115,57 @@ class DisabledRecordTests(unittest.TestCase):
 		)
 
 		client.dns.records.delete.assert_not_called()
+
+	def test_cloudflare_skips_cloudflare_tunnel_cname(self) -> None:
+		record = SimpleNamespace(
+			id="record-id",
+			name="one.example.com",
+			type="CNAME",
+			content="abc123.CFARGOtunnel.com.",
+			priority=None,
+		)
+		client = Mock()
+		client.dns.records.list.side_effect = lambda **kwargs: (
+			[record] if kwargs["name"] == record.name else []
+		)
+
+		sync_cloudflare_records(
+			[DNSRecord("CNAME", record.name, "new-target.example.com")],
+			client,
+			"zone-id",
+		)
+
+		client.dns.records.edit.assert_not_called()
+		client.dns.records.delete.assert_not_called()
+		client.dns.records.create.assert_not_called()
+
+	def test_technitium_skips_disabled_cloudflare_tunnel_cname(self) -> None:
+		record = SimpleNamespace(
+			name="one.example.com",
+			type="CNAME",
+			r_data={"cname": "abc123.cfargotunnel.com"},
+		)
+		client = Mock()
+		client.zones.get_records.side_effect = lambda **kwargs: (
+			[record] if kwargs["domain"] == record.name else []
+		)
+
+		sync_technitium_records(
+			[DNSRecord("CNAME", record.name, "abc123.cfargotunnel.com", disabled=True)],
+			client,
+			"zone",
+		)
+
+		client.zones.update_record.assert_not_called()
+		client.zones.delete_record.assert_not_called()
+		client.zones.add_record.assert_not_called()
+
+	def test_cloudflare_tunnel_suffix_requires_a_subdomain(self) -> None:
+		self.assertTrue(is_cloudflare_tunnel_target("tunnel.cfargotunnel.com"))
+		self.assertTrue(is_cloudflare_tunnel_target("tunnel.cfargotunnel.com."))
+		self.assertFalse(is_cloudflare_tunnel_target("cfargotunnel.com"))
+		self.assertFalse(is_cloudflare_tunnel_target("tunnel.cfargotunnel.com.example"))
+		self.assertFalse(is_cloudflare_tunnel_target(None))
 
 
 if __name__ == "__main__":

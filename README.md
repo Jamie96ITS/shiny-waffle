@@ -6,7 +6,7 @@ Set `disabled` to `true` to delete the matching DNS record; `false` or an empty 
 
 Supported record types are `A`, `AAAA`, `CNAME`, `MX`, `NS`, `PTR`, and `TXT`. Each MX row requires a numeric `priority` from 0 to 65535; multiple MX rows can share a name. TTL is optional and accepts `1` for automatic TTL or a value from 60 to 86400 seconds. If omitted, existing records keep their current TTL and new records use automatic TTL.
 
-Both sync programs check for a TXT record named `_dnsweaver.<record-name>` before reconciling an existing record. If found, they skip that record set, including disabled-row deletions, and report that DNSWeaver manages it.
+Both sync programs check for a TXT record named `_dnsweaver.<record-name>` before reconciling an existing record. If found, they skip that record set, including disabled-row deletions, and report that DNSWeaver manages it. They also skip existing CNAME records whose target ends in `.cfargotunnel.com` (case-insensitive, with an optional trailing dot), reporting that Cloudflare Tunnels manages the name.
 
 Credentials can come from environment variables or the default `.cloudflare-dns-sync.json` file. The JSON file uses `api_token` and `zone_id` keys; environment variables take precedence. A different file can be selected with `--config`. Cloudflare DNS record requests use the zone ID and do not require an account ID. The API token must have Zone DNS Read and Zone DNS Edit permissions and be scoped to the selected zone. If a request returns HTTP 403, verify those permissions, the token's zone resource scope, and that `zone_id` identifies the intended zone.
 

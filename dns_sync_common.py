@@ -16,6 +16,10 @@ def dns_names_equal(first: str, second: str) -> bool:
 	return first.rstrip(".").casefold() == second.rstrip(".").casefold()
 
 
+def is_cloudflare_tunnel_target(target: str | None) -> bool:
+	return target is not None and target.rstrip(".").casefold().endswith(".cfargotunnel.com")
+
+
 @dataclass(frozen=True)
 class DNSRecord:
 	record_type: str

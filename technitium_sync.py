@@ -10,7 +10,13 @@ from typing import Any, Iterable
 from technitiumdns import Client
 from technitiumdns.models.zones import DnsRecord
 
-from dns_sync_common import DNSRecord, dns_names_equal, dnsweaver_marker_name, load_records
+from dns_sync_common import (
+	DNSRecord,
+	dns_names_equal,
+	dnsweaver_marker_name,
+	is_cloudflare_tunnel_target,
+	load_records,
+)
 
 
 TARGET_FIELDS = {
@@ -87,6 +93,11 @@ def sync_records(
 			for record in client.zones.get_records(domain=name, zone=zone)
 			if record.type == record_type and record.name.rstrip(".").lower() == name.rstrip(".").lower()
 		]
+		if record_type == "CNAME" and any(
+			is_cloudflare_tunnel_target(record_target(record, record_type)) for record in existing
+		):
+			print(f"SKIP {record_type} {name}: Cloudflare Tunnels manages this name")
+			continue
 		if existing:
 			marker_name = dnsweaver_marker_name(name)
 			markers = client.zones.get_records(domain=marker_name, zone=zone)

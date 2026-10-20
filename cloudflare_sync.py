@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Iterable
 
 from cloudflare import Cloudflare, PermissionDeniedError
-from dns_sync_common import DNSRecord, dns_names_equal, dnsweaver_marker_name, load_records
+from dns_sync_common import (
+	DNSRecord,
+	dns_names_equal,
+	dnsweaver_marker_name,
+	is_cloudflare_tunnel_target,
+	load_records,
+)
 
 
 def sync_records(
@@ -23,6 +29,11 @@ def sync_records(
 
 	for (record_type, name), desired_records in groups.items():
 		existing = list(client.dns.records.list(zone_id=zone_id, name=name, type=record_type))
+		if record_type == "CNAME" and any(
+			is_cloudflare_tunnel_target(record.content) for record in existing
+		):
+			print(f"SKIP {record_type} {name}: Cloudflare Tunnels manages this name")
+			continue
 		if existing:
 			marker_name = dnsweaver_marker_name(name)
 			markers = client.dns.records.list(zone_id=zone_id, name=marker_name, type="TXT")
