@@ -419,6 +419,30 @@ class DisabledRecordTests(unittest.TestCase):
 			proxied=True,
 		)
 
+	def test_cloudflare_dry_run_does_not_edit_updated_record(self) -> None:
+		record = SimpleNamespace(
+			id="record-id",
+			name="one.example.com",
+			type="A",
+			content="192.0.2.1",
+			priority=None,
+			proxied=False,
+			ttl=1,
+		)
+		client = Mock()
+		client.dns.records.list.side_effect = lambda **kwargs: (
+			[record] if kwargs["name"] == record.name else []
+		)
+
+		sync_cloudflare_records(
+			[DNSRecord("A", record.name, "192.0.2.2", proxied=True)],
+			client,
+			"zone-id",
+			dry_run=True,
+		)
+
+		client.dns.records.edit.assert_not_called()
+
 	def test_cloudflare_preserves_proxied_flag_when_unspecified(self) -> None:
 		record = SimpleNamespace(
 			id="record-id",

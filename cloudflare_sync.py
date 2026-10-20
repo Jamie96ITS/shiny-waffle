@@ -145,15 +145,15 @@ def sync_records(
 					update_params = {
 						"zone_id": zone_id,
 						"name": current.name,
-					"type": current.type,
-					"ttl": target_ttl,
-					"content": desired.target,
-				}
+						"type": current.type,
+						"ttl": target_ttl,
+						"content": desired.target,
+					}
 					if record_type == "MX":
 						update_params["priority"] = desired.priority
-				if desired.proxied is not None:
-					update_params["proxied"] = desired.proxied
-				client.dns.records.edit(current.id, **update_params)
+					if desired.proxied is not None:
+						update_params["proxied"] = desired.proxied
+					client.dns.records.edit(current.id, **update_params)
 				continue
 
 			print(f"CREATE {record_type} {name} -> {desired.target}")
