@@ -28,6 +28,7 @@ class DNSRecord:
 	ttl: int | None = None
 	priority: int | None = None
 	disabled: bool = False
+	proxied: bool | None = None
 
 
 def load_records(csv_path: Path) -> list[DNSRecord]:
@@ -47,6 +48,7 @@ def load_records(csv_path: Path) -> list[DNSRecord]:
 		ttl_header = headers.get("ttl")
 		priority_header = headers.get("priority")
 		disabled_header = headers.get("disabled")
+		proxied_header = headers.get("proxied")
 		if not all((type_header, name_header, target_header)):
 			raise ValueError("CSV must contain record_type (or type), name, and target columns")
 
@@ -59,6 +61,7 @@ def load_records(csv_path: Path) -> list[DNSRecord]:
 			ttl_value = (row.get(ttl_header) or "").strip() if ttl_header else ""
 			priority_value = (row.get(priority_header) or "").strip() if priority_header else ""
 			disabled_value = (row.get(disabled_header) or "").strip().casefold() if disabled_header else ""
+			proxied_value = (row.get(proxied_header) or "").strip().casefold() if proxied_header else ""
 			if not record_type or not name or not target:
 				raise ValueError(f"CSV row {row_number}: record type, name, and target are required")
 			if record_type not in SUPPORTED_RECORD_TYPES:
@@ -67,6 +70,11 @@ def load_records(csv_path: Path) -> list[DNSRecord]:
 			if disabled_value not in {"", "true", "false"}:
 				raise ValueError(f"CSV row {row_number}: disabled must be true, false, or empty")
 			disabled = disabled_value == "true"
+			if proxied_value not in {"", "true", "false"}:
+				raise ValueError(f"CSV row {row_number}: proxied must be true, false, or empty")
+			proxied = None if not proxied_value else proxied_value == "true"
+			if proxied and record_type not in {"A", "AAAA", "CNAME"}:
+				raise ValueError(f"CSV row {row_number}: proxied is only supported for A, AAAA, and CNAME records")
 
 			ttl = None
 			if ttl_value:
@@ -97,6 +105,6 @@ def load_records(csv_path: Path) -> list[DNSRecord]:
 				duplicate_detail = "duplicate MX target and priority" if record_type == "MX" else f"duplicate {record_type} record for {name!r}"
 				raise ValueError(f"CSV row {row_number}: {duplicate_detail}")
 			seen.add(key)
-			records.append(DNSRecord(record_type, name, target, ttl, priority, disabled))
+			records.append(DNSRecord(record_type, name, target, ttl, priority, disabled, proxied))
 
 	return records

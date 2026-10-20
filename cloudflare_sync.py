@@ -102,7 +102,7 @@ def sync_records(
 				target_priority = desired.priority if record_type == "MX" else None
 				if current.content == desired.target and current.ttl == target_ttl and (
 					record_type != "MX" or current.priority == target_priority
-				):
+				) and (desired.proxied is None or current.proxied == desired.proxied):
 					print(f"UNCHANGED {record_type} {name} -> {desired.target}")
 					continue
 
@@ -113,6 +113,8 @@ def sync_records(
 					changes.append(f"TTL {current.ttl} -> {target_ttl}")
 				if record_type == "MX" and current.priority != target_priority:
 					changes.append(f"priority {current.priority} -> {target_priority}")
+				if desired.proxied is not None and current.proxied != desired.proxied:
+					changes.append(f"proxied {current.proxied} -> {desired.proxied}")
 				print(f"UPDATE {record_type} {name}: {', '.join(changes)}")
 				if not dry_run:
 					update_params = {
@@ -124,7 +126,9 @@ def sync_records(
 				}
 					if record_type == "MX":
 						update_params["priority"] = desired.priority
-					client.dns.records.edit(current.id, **update_params)
+				if desired.proxied is not None:
+					update_params["proxied"] = desired.proxied
+				client.dns.records.edit(current.id, **update_params)
 				continue
 
 			print(f"CREATE {record_type} {name} -> {desired.target}")
@@ -138,6 +142,8 @@ def sync_records(
 				}
 				if record_type == "MX":
 					create_params["priority"] = desired.priority
+				if desired.proxied is not None:
+					create_params["proxied"] = desired.proxied
 				client.dns.records.create(**create_params)
 
 

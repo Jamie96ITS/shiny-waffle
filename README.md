@@ -1,8 +1,10 @@
 # Cloudflare DNS CSV Sync
 
-Create, update, or delete DNS records in one Cloudflare zone from a CSV file. The CSV must have `record_type`, `name`, and `target` columns. `type` is also accepted as an alias for `record_type`. Optional columns are `ttl`, `priority`, and `disabled`.
+Create, update, or delete DNS records in one Cloudflare zone from a CSV file. The CSV must have `record_type`, `name`, and `target` columns. `type` is also accepted as an alias for `record_type`. Optional columns are `ttl`, `priority`, `disabled`, and `proxied`.
 
 Set `disabled` to `true` to delete the matching DNS record; `false` or an empty value leaves it enabled. The value is case-insensitive. A disabled row still requires the record type, name, and target so the sync can identify the record. Deletions are shown without being applied when using `--dry-run`.
+
+For Cloudflare A, AAAA, and CNAME records, set `proxied` to `true` or `false` to enable or disable Cloudflare proxying. Values are case-insensitive; an empty value (or a missing column) leaves the current setting unchanged on updates and uses Cloudflare's default on creates. The `proxied` column is Cloudflare-specific and is ignored by the Technitium provider.
 
 Supported record types are `A`, `AAAA`, `CNAME`, `MX`, `NS`, `PTR`, and `TXT`. Each MX row requires a numeric `priority` from 0 to 65535; multiple MX rows can share a name. TTL is optional and accepts `1` for automatic TTL or a value from 60 to 86400 seconds. If omitted, existing records keep their current TTL and new records use automatic TTL.
 

@@ -1,6 +1,6 @@
-record_type,name,target,ttl,priority,disabled
-A,www.example.com,192.0.2.10,3600,,false
-CNAME,docs.example.com,www.example.com,,,false
-TXT,example.com,verification-token,1,,false
-MX,example.com,mail1.example.com,3600,10,false
-MX,example.com,mail2.example.com,3600,20,false
+record_type,name,target,ttl,priority,disabled,proxied
+A,www.example.com,192.0.2.10,3600,,false,true
+CNAME,docs.example.com,www.example.com,,,false,false
+TXT,example.com,verification-token,1,,false,
+MX,example.com,mail1.example.com,3600,10,false,
+MX,example.com,mail2.example.com,3600,20,false,

@@ -10,6 +10,45 @@ from technitium_sync import sync_records as sync_technitium_records
 
 
 class DisabledRecordTests(unittest.TestCase):
+	def test_load_records_parses_proxied_values(self) -> None:
+		with tempfile.TemporaryDirectory() as directory:
+			csv_path = Path(directory) / "records.csv"
+			csv_path.write_text(
+				"record_type,name,target,proxied\n"
+				"A,one.example.com,192.0.2.1,true\n"
+				"AAAA,two.example.com,2001:db8::1,FALSE\n"
+				"CNAME,three.example.com,target.example.com,\n",
+				encoding="utf-8",
+			)
+
+			records = load_records(csv_path)
+
+		self.assertEqual([record.proxied for record in records], [True, False, None])
+
+	def test_load_records_rejects_invalid_proxied_value(self) -> None:
+		with tempfile.TemporaryDirectory() as directory:
+			csv_path = Path(directory) / "records.csv"
+			csv_path.write_text(
+				"record_type,name,target,proxied\n"
+				"A,one.example.com,192.0.2.1,yes\n",
+				encoding="utf-8",
+			)
+
+			with self.assertRaisesRegex(ValueError, "proxied must be true, false, or empty"):
+				load_records(csv_path)
+
+	def test_load_records_rejects_proxied_non_proxyable_record(self) -> None:
+		with tempfile.TemporaryDirectory() as directory:
+			csv_path = Path(directory) / "records.csv"
+			csv_path.write_text(
+				"record_type,name,target,proxied\n"
+				"TXT,example.com,token,true\n",
+				encoding="utf-8",
+			)
+
+			with self.assertRaisesRegex(ValueError, "proxied is only supported for A, AAAA, and CNAME"):
+				load_records(csv_path)
+
 	def test_load_records_parses_disabled_values(self) -> None:
 		with tempfile.TemporaryDirectory() as directory:
 			csv_path = Path(directory) / "records.csv"
@@ -166,6 +205,80 @@ class DisabledRecordTests(unittest.TestCase):
 		self.assertFalse(is_cloudflare_tunnel_target("cfargotunnel.com"))
 		self.assertFalse(is_cloudflare_tunnel_target("tunnel.cfargotunnel.com.example"))
 		self.assertFalse(is_cloudflare_tunnel_target(None))
+
+	def test_cloudflare_updates_proxied_flag(self) -> None:
+		record = SimpleNamespace(
+			id="record-id",
+			name="one.example.com",
+			type="A",
+			content="192.0.2.1",
+			priority=None,
+			proxied=False,
+			ttl=1,
+		)
+		client = Mock()
+		client.dns.records.list.side_effect = lambda **kwargs: (
+			[record] if kwargs["name"] == record.name else []
+		)
+
+		sync_cloudflare_records(
+			[DNSRecord("A", record.name, record.content, proxied=True)],
+			client,
+			"zone-id",
+		)
+
+		client.dns.records.edit.assert_called_once_with(
+			"record-id",
+			zone_id="zone-id",
+			name="one.example.com",
+			type="A",
+			ttl=1,
+			content="192.0.2.1",
+			proxied=True,
+		)
+
+	def test_cloudflare_preserves_proxied_flag_when_unspecified(self) -> None:
+		record = SimpleNamespace(
+			id="record-id",
+			name="one.example.com",
+			type="A",
+			content="192.0.2.1",
+			priority=None,
+			proxied=True,
+			ttl=1,
+		)
+		client = Mock()
+		client.dns.records.list.side_effect = lambda **kwargs: (
+			[record] if kwargs["name"] == record.name else []
+		)
+
+		sync_cloudflare_records(
+			[DNSRecord("A", record.name, record.content)],
+			client,
+			"zone-id",
+		)
+
+		client.dns.records.edit.assert_not_called()
+		client.dns.records.create.assert_not_called()
+
+	def test_cloudflare_creates_with_explicit_proxied_flag(self) -> None:
+		client = Mock()
+		client.dns.records.list.return_value = []
+
+		sync_cloudflare_records(
+			[DNSRecord("A", "one.example.com", "192.0.2.1", proxied=True)],
+			client,
+			"zone-id",
+		)
+
+		client.dns.records.create.assert_called_once_with(
+			zone_id="zone-id",
+			name="one.example.com",
+			type="A",
+			ttl=1,
+			content="192.0.2.1",
+			proxied=True,
+		)
 
 
 if __name__ == "__main__":
