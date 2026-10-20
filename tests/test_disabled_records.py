@@ -60,6 +60,22 @@ class DisabledRecordTests(unittest.TestCase):
 				priority=0,
 				proxied=None,
 			),
+			SimpleNamespace(
+				type="TXT",
+				name="_dnsweaver.www.example.com",
+				content="",
+				ttl=300,
+				priority=None,
+				proxied=False,
+			),
+			SimpleNamespace(
+				type="CNAME",
+				name="tunnel.example.com",
+				content="012345.cfargotunnel.com.",
+				ttl=300,
+				priority=None,
+				proxied=True,
+			),
 		]
 		client = Mock()
 		client.dns.records.list.return_value = existing
@@ -78,6 +94,12 @@ class DisabledRecordTests(unittest.TestCase):
 		self.assertIn("Records only on server:", output.getvalue())
 		self.assertIn("AAAA www.example.com -> 2001:db8::1", output.getvalue())
 		self.assertIn('CAA www.example.com -> 0 issue "letsencrypt.org"', output.getvalue())
+		self.assertIn("A www.example.com. -> 192.0.2.1 (TTL=300.0, proxied=true) [managed by DNSWeaver]", output.getvalue())
+		self.assertIn(
+			"CNAME tunnel.example.com -> 012345.cfargotunnel.com. "
+			"(TTL=300, proxied=true) [managed by Cloudflare Tunnels]",
+			output.getvalue(),
+		)
 
 	def test_technitium_report_filters_types_without_syncing(self) -> None:
 		existing = [
@@ -134,6 +156,41 @@ class DisabledRecordTests(unittest.TestCase):
 		self.assertIn("SOA example.com ->", output.getvalue())
 		self.assertIn('"primaryNameServer": "ns1.example.com"', output.getvalue())
 		self.assertIn('"serial": 2026102001', output.getvalue())
+
+	def test_technitium_report_marks_dnsweaver_owned_records(self) -> None:
+		records = [
+			SimpleNamespace(
+				type="A",
+				name="www.example.com",
+				r_data={"ipAddress": "192.0.2.1"},
+				ttl=300,
+			),
+			SimpleNamespace(
+				type="TXT",
+				name="_dnsweaver.www.example.com",
+				r_data={"text": "marker"},
+				ttl=300,
+			),
+			SimpleNamespace(
+				type="CNAME",
+				name="tunnel.example.com",
+				r_data={"cname": "012345.cfargotunnel.com"},
+				ttl=300,
+			),
+		]
+		client = Mock()
+		client.zones.get_records.return_value = records
+		output = io.StringIO()
+
+		with contextlib.redirect_stdout(output):
+			report_technitium_records([], client, "example.com", frozenset({"A", "CNAME"}))
+
+		self.assertIn("A www.example.com -> 192.0.2.1 (TTL=300) [managed by DNSWeaver]", output.getvalue())
+		self.assertIn(
+			"CNAME tunnel.example.com -> 012345.cfargotunnel.com "
+			"(TTL=300) [managed by Cloudflare Tunnels]",
+			output.getvalue(),
+		)
 
 	def test_load_records_parses_proxied_values(self) -> None:
 		with tempfile.TemporaryDirectory() as directory:

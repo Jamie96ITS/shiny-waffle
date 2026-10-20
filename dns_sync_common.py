@@ -111,6 +111,12 @@ def print_record_report(
 	server_records: list[tuple[str, str, str, int | None, int | None, bool | None]],
 	record_types: frozenset[str] | None,
 ) -> None:
+	dnsweaver_managed_names = {
+		name.rstrip(".").casefold()[len("_dnsweaver."):]
+		for record_type, name, _target, _ttl, _priority, _proxied in server_records
+		if record_type.upper() == "TXT"
+		and name.rstrip(".").casefold().startswith("_dnsweaver.")
+	}
 	csv_keys = {
 		dns_record_key(record.record_type, record.name, record.target, record.priority)
 		for record in csv_records
@@ -146,7 +152,14 @@ def print_record_report(
 			if proxied is not None:
 				details.append(f"proxied={str(proxied).lower()}")
 			suffix = f" ({', '.join(details)})" if details else ""
-			print(f"  {record_type} {name} -> {target}{suffix}")
+			ownership = []
+			name_key = name.rstrip(".").casefold()
+			if name_key in dnsweaver_managed_names:
+				ownership.append("DNSWeaver")
+			if record_type.upper() == "CNAME" and is_cloudflare_tunnel_target(target):
+				ownership.append("Cloudflare Tunnels")
+			ownership_suffix = f" [managed by {', '.join(ownership)}]" if ownership else ""
+			print(f"  {record_type} {name} -> {target}{suffix}{ownership_suffix}")
 
 	print_section("Records also in CSV", in_csv)
 	print_section("Records only on server", server_only)
