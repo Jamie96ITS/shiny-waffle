@@ -20,6 +20,48 @@ def is_cloudflare_tunnel_target(target: str | None) -> bool:
 	return target is not None and target.rstrip(".").casefold().endswith(".cfargotunnel.com")
 
 
+def conflicting_record_types(record_type: str) -> set[str]:
+	if record_type == "CNAME":
+		return {"A", "AAAA"}
+	if record_type in {"A", "AAAA"}:
+		return {"CNAME"}
+	return set()
+
+
+def validate_cname_address_conflicts(records: list["DNSRecord"]) -> None:
+	active_types_by_name: dict[str, set[str]] = {}
+	names_by_key: dict[str, str] = {}
+	for record in records:
+		if record.disabled or record.record_type not in {"A", "AAAA", "CNAME"}:
+			continue
+		name_key = record.name.rstrip(".").casefold()
+		active_types_by_name.setdefault(name_key, set()).add(record.record_type)
+		names_by_key[name_key] = record.name
+
+	for name_key, record_types in active_types_by_name.items():
+		if "CNAME" in record_types and record_types.intersection({"A", "AAAA"}):
+			address_types = ", ".join(sorted(record_types.intersection({"A", "AAAA"})))
+			raise ValueError(
+				f"Conflicting DNS records for {names_by_key[name_key]!r}: "
+				f"CNAME cannot coexist with {address_types}"
+			)
+
+
+def record_is_disabled(
+	records: list["DNSRecord"],
+	record_type: str,
+	name: str,
+	target: str,
+) -> bool:
+	return any(
+		record.disabled
+		and record.record_type == record_type
+		and dns_names_equal(record.name, name)
+		and record.target.casefold() == target.casefold()
+		for record in records
+	)
+
+
 @dataclass(frozen=True)
 class DNSRecord:
 	record_type: str
@@ -107,4 +149,5 @@ def load_records(csv_path: Path) -> list[DNSRecord]:
 			seen.add(key)
 			records.append(DNSRecord(record_type, name, target, ttl, priority, disabled, proxied))
 
+	validate_cname_address_conflicts(records)
 	return records

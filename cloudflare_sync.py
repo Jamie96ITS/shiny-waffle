@@ -12,8 +12,11 @@ from dns_sync_common import (
 	DNSRecord,
 	dns_names_equal,
 	dnsweaver_marker_name,
+	conflicting_record_types,
 	is_cloudflare_tunnel_target,
 	load_records,
+	record_is_disabled,
+	validate_cname_address_conflicts,
 )
 
 
@@ -23,11 +26,17 @@ def sync_records(
 	zone_id: str,
 	dry_run: bool = False,
 ) -> None:
+	records = list(records)
+	validate_cname_address_conflicts(records)
 	groups: dict[tuple[str, str], list[DNSRecord]] = {}
 	for desired in records:
 		groups.setdefault((desired.record_type, desired.name), []).append(desired)
 
-	for (record_type, name), desired_records in groups.items():
+	ordered_groups = sorted(
+		groups.items(),
+		key=lambda item: any(not record.disabled for record in item[1]),
+	)
+	for (record_type, name), desired_records in ordered_groups:
 		existing = list(client.dns.records.list(zone_id=zone_id, name=name, type=record_type))
 		if record_type == "CNAME" and any(
 			is_cloudflare_tunnel_target(record.content) for record in existing
@@ -40,6 +49,21 @@ def sync_records(
 			if any(dns_names_equal(marker.name, marker_name) for marker in markers):
 				print(f"SKIP {record_type} {name}: DNSWeaver manages this record (TXT {marker_name})")
 				continue
+
+		enabled_records = [record for record in desired_records if not record.disabled]
+		conflict_types = conflicting_record_types(record_type)
+		if enabled_records and conflict_types:
+			for current in client.dns.records.list(zone_id=zone_id, name=name):
+				if (
+					current.type in conflict_types
+					and dns_names_equal(current.name, name)
+					and not record_is_disabled(records, current.type, current.name, current.content)
+				):
+					raise ValueError(
+						f"Cannot sync {record_type} record for {name!r}: existing "
+						f"{current.type} record conflicts with CNAME/A/AAAA record rules. "
+						f"Disable the conflicting record in the CSV first."
+					)
 
 		available = existing.copy()
 		matches: dict[int, object] = {}
@@ -61,7 +85,6 @@ def sync_records(
 			if not dry_run:
 				client.dns.records.delete(current.id, zone_id=zone_id)
 
-		enabled_records = [record for record in desired_records if not record.disabled]
 		records_to_reconcile = available.copy()
 
 		for index, desired in enumerate(enabled_records):

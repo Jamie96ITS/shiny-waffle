@@ -10,6 +10,8 @@ Supported record types are `A`, `AAAA`, `CNAME`, `MX`, `NS`, `PTR`, and `TXT`. E
 
 Both sync programs check for a TXT record named `_dnsweaver.<record-name>` before reconciling an existing record. If found, they skip that record set, including disabled-row deletions, and report that DNSWeaver manages it. They also skip existing CNAME records whose target ends in `.cfargotunnel.com` (case-insensitive, with an optional trailing dot), reporting that Cloudflare Tunnels manages the name.
 
+The sync rejects active CSV rows and checks existing zone records to prevent a CNAME from coexisting with an A or AAAA record at the same name. To switch between these record types, mark the conflicting record `disabled=true`; the sync processes disabled rows first.
+
 Credentials can come from environment variables or the default `.cloudflare-dns-sync.json` file. The JSON file uses `api_token` and `zone_id` keys; environment variables take precedence. A different file can be selected with `--config`. Cloudflare DNS record requests use the zone ID and do not require an account ID. The API token must have Zone DNS Read and Zone DNS Edit permissions and be scoped to the selected zone. If a request returns HTTP 403, verify those permissions, the token's zone resource scope, and that `zone_id` identifies the intended zone.
 
 For example, create `.cloudflare-dns-sync.json` using the structure in [cloudflare-dns-sync.example.json](cloudflare-dns-sync.example.json), then preview the changes:

@@ -12,10 +12,13 @@ from technitiumdns.models.zones import DnsRecord
 
 from dns_sync_common import (
 	DNSRecord,
+	conflicting_record_types,
 	dns_names_equal,
 	dnsweaver_marker_name,
 	is_cloudflare_tunnel_target,
 	load_records,
+	record_is_disabled,
+	validate_cname_address_conflicts,
 )
 
 
@@ -83,15 +86,21 @@ def sync_records(
 	zone: str,
 	dry_run: bool = False,
 ) -> None:
+	records = list(records)
+	validate_cname_address_conflicts(records)
 	groups: dict[tuple[str, str], list[DNSRecord]] = {}
 	for desired in records:
 		groups.setdefault((desired.record_type, desired.name), []).append(desired)
 
-	for (record_type, name), desired_records in groups.items():
+	ordered_groups = sorted(
+		groups.items(),
+		key=lambda item: any(not record.disabled for record in item[1]),
+	)
+	for (record_type, name), desired_records in ordered_groups:
+		zone_records = client.zones.get_records(domain=name, zone=zone)
 		existing = [
-			record
-			for record in client.zones.get_records(domain=name, zone=zone)
-			if record.type == record_type and record.name.rstrip(".").lower() == name.rstrip(".").lower()
+			record for record in zone_records
+			if record.type == record_type and dns_names_equal(record.name, name)
 		]
 		if record_type == "CNAME" and any(
 			is_cloudflare_tunnel_target(record_target(record, record_type)) for record in existing
@@ -107,6 +116,23 @@ def sync_records(
 			):
 				print(f"SKIP {record_type} {name}: DNSWeaver manages this record (TXT {marker_name})")
 				continue
+
+		enabled_records = [record for record in desired_records if not record.disabled]
+		conflict_types = conflicting_record_types(record_type)
+		if enabled_records and conflict_types:
+			for current in zone_records:
+				target = record_target(current, current.type) if current.type in conflict_types else None
+				if (
+					current.type in conflict_types
+					and dns_names_equal(current.name, name)
+					and target is not None
+					and not record_is_disabled(records, current.type, current.name, target)
+				):
+					raise ValueError(
+						f"Cannot sync {record_type} record for {name!r}: existing "
+						f"{current.type} record conflicts with CNAME/A/AAAA record rules. "
+						f"Disable the conflicting record in the CSV first."
+					)
 
 		available = existing.copy()
 		matches: dict[int, DnsRecord] = {}
@@ -128,7 +154,6 @@ def sync_records(
 			if not dry_run:
 				client.zones.delete_record(domain=current.name, zone=zone, type=record_type)
 
-		enabled_records = [record for record in desired_records if not record.disabled]
 		records_to_reconcile = available.copy()
 
 		for index, desired in enumerate(enabled_records):
