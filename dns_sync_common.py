@@ -8,6 +8,14 @@ from pathlib import Path
 SUPPORTED_RECORD_TYPES = {"A", "AAAA", "CNAME", "MX", "NS", "PTR", "TXT"}
 
 
+def dnsweaver_marker_name(name: str) -> str:
+	return f"_dnsweaver.{name.rstrip('.')}"
+
+
+def dns_names_equal(first: str, second: str) -> bool:
+	return first.rstrip(".").casefold() == second.rstrip(".").casefold()
+
+
 @dataclass(frozen=True)
 class DNSRecord:
 	record_type: str

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from cloudflare import Cloudflare
-from dns_sync_common import DNSRecord, load_records
+from dns_sync_common import DNSRecord, dns_names_equal, dnsweaver_marker_name, load_records
 
 
 def sync_records(
@@ -23,6 +23,13 @@ def sync_records(
 
 	for (record_type, name), desired_records in groups.items():
 		existing = list(client.dns.records.list(zone_id=zone_id, name=name, type=record_type))
+		if existing:
+			marker_name = dnsweaver_marker_name(name)
+			markers = client.dns.records.list(zone_id=zone_id, name=marker_name, type="TXT")
+			if any(dns_names_equal(marker.name, marker_name) for marker in markers):
+				print(f"SKIP {record_type} {name}: DNSWeaver manages this record (TXT {marker_name})")
+				continue
+
 		available = existing.copy()
 		matches: dict[int, object] = {}
 

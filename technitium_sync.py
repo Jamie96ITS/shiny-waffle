@@ -10,7 +10,7 @@ from typing import Any, Iterable
 from technitiumdns import Client
 from technitiumdns.models.zones import DnsRecord
 
-from dns_sync_common import DNSRecord, load_records
+from dns_sync_common import DNSRecord, dns_names_equal, dnsweaver_marker_name, load_records
 
 
 TARGET_FIELDS = {
@@ -87,6 +87,16 @@ def sync_records(
 			for record in client.zones.get_records(domain=name, zone=zone)
 			if record.type == record_type and record.name.rstrip(".").lower() == name.rstrip(".").lower()
 		]
+		if existing:
+			marker_name = dnsweaver_marker_name(name)
+			markers = client.zones.get_records(domain=marker_name, zone=zone)
+			if any(
+				record.type == "TXT" and dns_names_equal(record.name, marker_name)
+				for record in markers
+			):
+				print(f"SKIP {record_type} {name}: DNSWeaver manages this record (TXT {marker_name})")
+				continue
+
 		available = existing.copy()
 		matches: dict[int, DnsRecord] = {}
 
